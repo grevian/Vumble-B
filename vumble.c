@@ -2,8 +2,9 @@
  * vim: softtabstop=4 shiftwidth=4 cindent foldmethod=marker expandtab
  *
  * Copyright 2009-2010 Eric Connell 
+ * Copyright 2012 Josh Hayes-Sheen <grevian@gmail.com>
  *
- * This file is part of Mangler.
+ * This file is part of Vumble, it was originally part of Mangler
  *
  * Mangler is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -59,7 +60,7 @@ void ctrl_c (int signum) {
 }
 
 void usage(char *argv[]) {
-    fprintf(stderr, "usage: %s -h hostname:port -u username -c channelid\n", argv[0]);
+    fprintf(stderr, "usage: %s -h hostname:port -u username [-p password] -c channelid\n", argv[0]);
     exit(1);
 }
 
