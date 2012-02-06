@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <list>
+#include <deque>
 
 #include <boost/asio.hpp>
 #include <boost/asio/ssl.hpp>
