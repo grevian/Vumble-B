@@ -42,8 +42,8 @@ void ctrl_c(int signum);
 void *v3_feeder(void *connptr);
 void *v3_consumer(void *connptr);
 
-int debug = 0;
-int should_exit = 0;
+int debug = 2;
+int keep_running = 1;
 
 struct _conninfo {
     char *server;
@@ -55,6 +55,7 @@ struct _conninfo {
 void ctrl_c (int signum) {
     printf("disconnecting... ");
     v3_logout();
+    keep_running = 0;
     printf("done\n");
     exit(0);
 }
@@ -64,75 +65,64 @@ void usage(char *argv[]) {
     exit(1);
 }
 
-void *v3_feeder(void *connptr) {
+void main_loop(void *connptr) {
     struct _conninfo *conninfo;
     _v3_net_message *msg;
+    v3_event *ev;
+
     conninfo = connptr;
     if (debug >= 2) {
         v3_debuglevel(V3_DEBUG_PACKET | V3_DEBUG_PACKET_PARSE | V3_DEBUG_INFO);
     }
     if (! v3_login(conninfo->server, conninfo->username, conninfo->password, "")) {
-        fprintf(stderr, "could not log in to server: %s\n", _v3_error(NULL));
+        fprintf(stderr, "could not log in to ventrilo server: %s\n", _v3_error(NULL));
     }
-    while ((msg = _v3_recv(V3_BLOCK)) != NULL) {
-        switch (_v3_process_message(msg)) {
-            case V3_MALFORMED:
-                _v3_debug(V3_DEBUG_INFO, "received malformed packet");
-                break;
-            case V3_NOTIMPL:
-                _v3_debug(V3_DEBUG_INFO, "packet type not implemented");
-                break;
-            case V3_OK:
-                _v3_debug(V3_DEBUG_INFO, "packet processed");
-                break;
-        }
-    }
-    should_exit = 1;
-    pthread_exit(NULL);
-}
 
-void *v3_consumer(void *connptr) {
-    struct _conninfo *conninfo;
-    v3_event *ev;
+    while (keep_running) {
 
-    conninfo = connptr;
-    while ((ev = v3_get_event(V3_BLOCK))) {
-        if (debug) {
-            fprintf(stderr, "lv3_test: got event type %d\n", ev->type);
+        // Handle incoming events
+        msg = _v3_recv(V3_NONBLOCK);
+        if ( msg != NULL ) {
+            switch (_v3_process_message(msg)) {
+                case V3_MALFORMED:
+                    _v3_debug(V3_DEBUG_INFO, "received malformed packet");
+                    break;
+                case V3_NOTIMPL:
+                    _v3_debug(V3_DEBUG_INFO, "packet type not implemented");
+                    break;
+                case V3_OK:
+                    _v3_debug(V3_DEBUG_INFO, "packet processed");
+                    break;
+            }
+            // free(msg); // Looks like process_message handles freeing the memory used
         }
-        switch (ev->type) {
-            case V3_EVENT_DISCONNECT:
-                should_exit = 1;
-                free(ev);
-                pthread_exit(NULL);
-                break;
-            case V3_EVENT_LOGIN_COMPLETE:
-                v3_change_channel(atoi(conninfo->channelid), "");
-                fprintf(stderr, "***********************************************************************************\n");
-                fprintf(stderr, "***********************************************************************************\n");
-                fprintf(stderr, "***********************************************************************************\n");
-                fprintf(stderr, "***********************************************************************************\n");
-                fprintf(stderr, "***********************************************************************************\n");
-                fprintf(stderr, "***********************************************************************************\n");
-                fprintf(stderr, "***********************************************************************************\n");
-#ifndef _WIN32
-                sleep(5);
-#else
-				Sleep(5000);
-#endif
-                v3_serverprop_open();
-                break;
+
+        // Handle any outgoing Events
+        ev = v3_get_event(V3_NONBLOCK);
+        if ( ev != NULL ) {
+            if (debug) {
+                fprintf(stderr, "vumble: got event type %d\n", ev->type);
+            }
+            switch (ev->type) {
+                case V3_EVENT_DISCONNECT:
+                    keep_running = 0;
+                    break;
+                case V3_EVENT_LOGIN_COMPLETE:
+                    v3_change_channel(atoi(conninfo->channelid), "");
+                    fprintf(stderr, "***********************************************************************************\n");
+                    fprintf(stderr, "Connected to Ventrilo Server\n");
+                    fprintf(stderr, "***********************************************************************************\n");
+                    v3_serverprop_open();
+                    break;
+            }
+            free(ev);
         }
-        free(ev);
     }
-    pthread_exit(NULL);
 }
 
 int main(int argc, char *argv[]) {
     int opt;
     int rc;
-    pthread_t feeder;
-    pthread_t consumer;
     struct _conninfo conninfo;
 
     memset(&conninfo, 0, sizeof(struct _conninfo));
@@ -171,15 +161,8 @@ int main(int argc, char *argv[]) {
         conninfo.password = "";
     }
     fprintf(stderr, "server: %s\nusername: %s\n", conninfo.server, conninfo.username);
-    rc = pthread_create(&feeder, NULL, v3_feeder, (void *)&conninfo);
-    rc = pthread_create(&consumer, NULL, v3_consumer, (void *)&conninfo);
     signal (SIGINT, ctrl_c);
-    while (! should_exit) {
-#ifndef _WIN32
-        sleep(1);
-#else
-		Sleep(1000);
-#endif
-    }
+    main_loop((void*)&conninfo);
     return(0);
 }
+
