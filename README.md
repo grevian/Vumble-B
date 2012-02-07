@@ -1,6 +1,6 @@
 # Vumble-B
 
-This project is a bridge to create a simple bridge between [Mumble](http://mumble.sourceforge.net/) and [Ventrilo](http://www.ventrilo.com/)
+This project is designed to create a simple bridge between [Mumble](http://mumble.sourceforge.net/) and [Ventrilo](http://www.ventrilo.com/)
 
 It uses libventrilo3 from [Mangler](http://www.mangler.org/) to interface with Ventrilo, and [libmumbleclient](https://github.com/pcgod/libmumbleclient) to interface
 with Mumble
