@@ -1,8 +1,8 @@
 # Vumble-B
 
-This project is a bridge to create a simple bridge between Mumble http://mumble.sourceforge.net/ and Ventrilo http://www.ventrilo.com/
+This project is a bridge to create a simple bridge between [Mumble](http://mumble.sourceforge.net/) and [Ventrilo](http://www.ventrilo.com/)
 
-It uses libventrilo3 from http://www.mangler.org/ to interface with Ventrilo, and https://github.com/pcgod/libmumbleclient to interface
+It uses libventrilo3 from [Mangler](http://www.mangler.org/) to interface with Ventrilo, and [libmumbleclient](https://github.com/pcgod/libmumbleclient) to interface
 with Mumble
 
 ## Heads Up
@@ -23,10 +23,10 @@ short periods of time.
 
 * The major area that needs improvement, is the functionality of libmumbleclient, currently its support for the mumble protocol is only
 for connecting and sending text messages, everything else it does by playing back or recording raw udp/tcp streams as tunneled in the protocol,
-this means it cannot natively identify specific protocols, different speakers, etc. 
+this means it cannot natively identify specific protocols, different speakers, etc. which makes transcoding audio, filtering, etc. very difficult.
 * The next major area would be libventrilo3, its API is a bit clunky, but mostly it's just an entirely different coding style than libmumbleclient, 
 specifically it's C style functional programming, while libmumbleclient is OO C++, this makes interfacing them slightly clunky, an OO wrapper over
-libventrilo3 would be nice.
+libventrilo3 would be nice. (It had to be patched to even link against C++ code)
 * Both libraries are extracted from parent projects, libventrilo3 reflects this in that I had to strip out the autoconf build system that integrated
 it with its parent, both libraries have a small mountain of dependencies, having them broken out into their own independant projects with their own
 build systems would be very useful
