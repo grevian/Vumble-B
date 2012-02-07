@@ -1,8 +1,22 @@
-#include <celt/celt.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <signal.h>
+#include <strings.h>
+#include <sys/types.h>
+#include <string.h>
+#include <getopt.h>
+#include <pthread.h>
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 #include <iostream>
 #include <fstream>
 #include <boost/make_shared.hpp>
 #include <boost/thread.hpp>
+
+#include <celt/celt.h>
 
 #include "client.h"
 #include "client_lib.h"
@@ -10,6 +24,8 @@
 #include "messages.h"
 #include "PacketDataStream.h"
 #include "settings.h"
+
+#include "ventrilo3.h"
 
 namespace {
 
@@ -20,6 +36,9 @@ bool recording = false;
 bool playback = false;
 
 boost::thread *playback_thread = NULL;
+
+int debug = 1;
+
 
 inline int32_t pds_int_len(char* x) {
 	if ((x[0] & 0x80) == 0x00) {
@@ -190,7 +209,134 @@ void RelayTunnelCallback(int32_t length, void* buffer, MumbleClient::MumbleClien
 
 }  // namespace
 
-int main(int /* argc */, char** /* argv[] */) {
+bool keep_running = true;
+void usage(char *argv[]);
+void ctrl_c(int signum);
+void main_loop(void *connptr, MumbleClient::MumbleClientLib* mc);
+
+
+struct _conninfo {
+    char *server;
+    char *username;
+    char *password;
+    char *channelid;
+};
+
+void ctrl_c (int signum) {
+    printf("disconnecting... ");
+    v3_logout();
+    keep_running = false;
+    printf("done\n");
+    exit(0);
+}
+
+void usage(char *argv[]) {
+    fprintf(stderr, "usage: %s -h hostname:port -u username [-p password] -c channelid\n", argv[0]);
+    exit(1);
+}
+
+void main_loop(void *connptr, MumbleClient::MumbleClientLib* mcl) {
+    struct _conninfo *conninfo;
+    _v3_net_message *msg;
+    v3_event *ev;
+
+    conninfo = connptr;
+    if (debug >= 2) {
+        v3_debuglevel(V3_DEBUG_PACKET | V3_DEBUG_PACKET_PARSE | V3_DEBUG_INFO);
+    }
+    if (! v3_login(conninfo->server, conninfo->username, conninfo->password, "")) {
+        fprintf(stderr, "could not log in to ventrilo server: %s\n", _v3_error(NULL));
+    }
+
+    while (keep_running) {
+        // Handle the Mumble Client
+  	    mcl->Pump();
+
+        // Handle incoming events
+        msg = _v3_recv(V3_NONBLOCK);
+        if ( msg != NULL ) {
+            switch (_v3_process_message(msg)) {
+                case V3_MALFORMED:
+                    _v3_debug(V3_DEBUG_INFO, "received malformed packet");
+                    break;
+                case V3_NOTIMPL:
+                    _v3_debug(V3_DEBUG_INFO, "packet type not implemented");
+                    break;
+                case V3_OK:
+                    _v3_debug(V3_DEBUG_INFO, "packet processed");
+                    break;
+            }
+            // free(msg); // Looks like process_message handles freeing the memory used
+        }
+
+        // Handle any outgoing Events
+        ev = v3_get_event(V3_NONBLOCK);
+        if ( ev != NULL ) {
+            if (debug) {
+                fprintf(stderr, "vumble: got event type %d\n", ev->type);
+            }
+            switch (ev->type) {
+                case V3_EVENT_DISCONNECT:
+                    keep_running = false;
+                    break;
+                case V3_EVENT_LOGIN_COMPLETE:
+                    v3_change_channel(atoi(conninfo->channelid), "");
+                    fprintf(stderr, "***********************************************************************************\n");
+                    fprintf(stderr, "Connected to Ventrilo Server\n");
+                    fprintf(stderr, "***********************************************************************************\n");
+                    v3_serverprop_open();
+                    break;
+            }
+            free(ev);
+        }
+    }
+}
+
+
+int main(int argc, char* argv[] ) {
+
+    int opt;
+    int rc;
+    struct _conninfo conninfo;
+
+    memset(&conninfo, 0, sizeof(struct _conninfo));
+    while ((opt = getopt(argc, argv, "dh:p:u:c:")) != -1) {
+        switch (opt) {
+            case 'd':
+                debug++;
+                break;
+            case 'h':
+                conninfo.server = strdup(optarg);
+                break;
+            case 'u':
+                conninfo.username = strdup(optarg);
+                break;
+            case 'c':
+                conninfo.channelid = strdup(optarg);
+                break;
+            case 'p':
+                conninfo.password = strdup(optarg);
+                break;
+        }
+    }
+    if (! conninfo.server)  {
+        fprintf(stderr, "error: server hostname (-h) was not specified\n");
+        usage(argv);
+    }
+    if (! conninfo.username)  {
+        fprintf(stderr, "error: username (-u) was not specified\n");
+        usage(argv);
+    }
+    if (! conninfo.channelid) {
+        fprintf(stderr, "error: channel id (-c) was not specified\n");
+        usage(argv);
+    }
+    if (! conninfo.password) {
+        conninfo.password = "";
+    }
+    fprintf(stderr, "server: %s\nusername: %s\n", conninfo.server, conninfo.username);
+    signal (SIGINT, ctrl_c);
+
 	MumbleClient::MumbleClientLib* mcl = MumbleClient::MumbleClientLib::instance();
 
 	MumbleClient::MumbleClientLib::SetLogLevel(1);
@@ -204,15 +350,13 @@ int main(int /* argc */, char** /* argv[] */) {
 	mc->SetTextMessageCallback(boost::bind(&TextMessageCallback, _1, mc));
 	mc->SetRawUdpTunnelCallback(boost::bind(&RawUdpTunnelCallback, _1, _2));
 
-	//mc->SetRawUdpTunnelCallback(boost::bind(&RelayTunnelCallback, _1, _2, mc2));
-	//mc2->SetRawUdpTunnelCallback(boost::bind(&RelayTunnelCallback, _1, _2, mc));
+  main_loop((void*)&conninfo, mcl);
 
-	//boost::thread relay_thread = boost::thread(RelayThread);
-
-	// Start event loop
-	mcl->Run();
 	delete mc;
 
 	mcl->Shutdown();
 	mcl = NULL;
+
 }
+
+
