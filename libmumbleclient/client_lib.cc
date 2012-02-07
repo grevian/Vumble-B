@@ -39,6 +39,11 @@ MumbleClient* MumbleClientLib::NewClient() {
 	return new MumbleClient(&io_service_);
 }
 
+void MumbleClientLib::Pump() {
+	if ( io_service_.run_one() > 0 )
+  	io_service_.reset();
+}
+
 void MumbleClientLib::Run() {
 	io_service_.reset();
 	io_service_.run();

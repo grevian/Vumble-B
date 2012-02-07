@@ -16,6 +16,7 @@ class DLL_PUBLIC MumbleClientLib {
 	static MumbleClientLib* instance();
 	MumbleClient* NewClient();
 	void Run();
+	void Pump();
 	void Shutdown();
 	static int32_t GetLogLevel();
 	static void SetLogLevel(int32_t level);
